@@ -5,22 +5,22 @@ use huginn_proxy_lib::config::{
 #[test]
 fn test_backend_http_version_deserialization(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let toml = r#"address = "backend:9000"
+    let toml = r#"address = "http://backend:9000"
 http_version = "http11""#;
     let backend: Backend = toml::from_str(toml)?;
     assert_eq!(backend.http_version, Some(BackendHttpVersion::Http11));
 
-    let toml = r#"address = "backend:9000"
+    let toml = r#"address = "http://backend:9000"
 http_version = "http2""#;
     let backend: Backend = toml::from_str(toml)?;
     assert_eq!(backend.http_version, Some(BackendHttpVersion::Http2));
 
-    let toml = r#"address = "backend:9000"
+    let toml = r#"address = "http://backend:9000"
 http_version = "preserve""#;
     let backend: Backend = toml::from_str(toml)?;
     assert_eq!(backend.http_version, Some(BackendHttpVersion::Preserve));
 
-    let toml = r#"address = "backend:9000""#;
+    let toml = r#"address = "http://backend:9000""#;
     let backend: Backend = toml::from_str(toml)?;
     assert_eq!(backend.http_version, None);
     Ok(())
@@ -31,10 +31,10 @@ fn test_config_with_http_version() -> Result<(), Box<dyn std::error::Error + Sen
     let toml = r#"
 listen = { addrs = ["127.0.0.1:0"] }
 backends = [
-  { address = "backend-a:9000", http_version = "http2" },
-  { address = "backend-b:9000", http_version = "http11" },
-  { address = "backend-c:9000", http_version = "preserve" },
-  { address = "backend-d:9000" }
+  { address = "http://backend-a:9000", http_version = "http2" },
+  { address = "http://backend-b:9000", http_version = "http11" },
+  { address = "http://backend-c:9000", http_version = "preserve" },
+  { address = "http://backend-d:9000" }
 ]
 "#;
 
@@ -49,7 +49,7 @@ backends = [
 
 #[test]
 fn test_backend_http_version_case_insensitive() {
-    let toml = r#"address = "backend:9000"
+    let toml = r#"address = "http://backend:9000"
 http_version = "HTTP11""#;
     assert!(toml::from_str::<Backend>(toml).is_err());
 }
@@ -94,11 +94,11 @@ fn test_mtls_full_config() -> Result<(), Box<dyn std::error::Error + Send + Sync
 listen = { addrs = ["0.0.0.0:7000"] }
 
 backends = [
-  { address = "backend-a:9000" }
+  { address = "http://backend-a:9000" }
 ]
 
 routes = [
-  { prefix = "/api", backend = "backend-a:9000" }
+  { prefix = "/api", backend = "http://backend-a:9000" }
 ]
 
 [tls]
@@ -129,7 +129,7 @@ required = { ca_cert_path = "/config/certs/client-ca.crt" }
 fn test_preserve_host_default_is_false() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 "#;
 
     let config: Config = toml::from_str(toml)?;
@@ -141,7 +141,7 @@ backends = [{ address = "backend:9000" }]
 fn test_preserve_host_enabled() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 preserve_host = true
 "#;
 
@@ -155,7 +155,7 @@ fn test_preserve_host_disabled_explicitly() -> Result<(), Box<dyn std::error::Er
 {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 preserve_host = false
 "#;
 
@@ -168,7 +168,7 @@ preserve_host = false
 fn test_timeout_defaults() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 "#;
 
     let config: Config = toml::from_str(toml)?;
@@ -184,7 +184,7 @@ backends = [{ address = "backend:9000" }]
 fn test_timeout_granular_config() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 
 [timeout]
 tls_handshake_secs = 20
@@ -202,7 +202,7 @@ fn test_timeout_connection_handling_default() -> Result<(), Box<dyn std::error::
 {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 
 [timeout]
 tls_handshake_secs = 15
@@ -218,7 +218,7 @@ fn test_backend_without_health_check_is_none(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000" }]
+backends = [{ address = "http://backend:9000" }]
 "#;
     let config: Config = toml::from_str(toml)?;
     assert!(config.backends[0].health_check.is_none());
@@ -230,7 +230,7 @@ fn test_backend_health_check_defaults_from_empty_table(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
-backends = [{ address = "backend:9000", health_check = {} }]
+backends = [{ address = "http://backend:9000", health_check = {} }]
 "#;
     let config: Config = toml::from_str(toml)?;
     let Some(hc) = config.backends[0].health_check.as_ref() else {
@@ -250,7 +250,7 @@ fn test_backend_health_check_explicit() -> Result<(), Box<dyn std::error::Error 
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
 backends = [
-  { address = "a:1", health_check = { type = "tcp", interval_secs = 10, timeout_secs = 3, unhealthy_threshold = 5, healthy_threshold = 4 } }
+  { address = "http://a:1", health_check = { type = "tcp", interval_secs = 10, timeout_secs = 3, unhealthy_threshold = 5, healthy_threshold = 4 } }
 ]
 "#;
     let config: Config = toml::from_str(toml)?;
@@ -284,7 +284,7 @@ fn test_backend_health_check_http_toml() -> Result<(), Box<dyn std::error::Error
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
 backends = [
-  { address = "a:1", health_check = { type = "http", path = "/ready", expected_status = 200, interval_secs = 4, timeout_secs = 2 } }
+  { address = "http://a:1", health_check = { type = "http", path = "/ready", expected_status = 200, interval_secs = 4, timeout_secs = 2 } }
 ]
 "#;
     let config: Config = toml::from_str(toml)?;
@@ -307,7 +307,7 @@ fn test_backend_health_check_http_expected_status_defaults(
     let toml = r#"
 listen = { addrs = ["0.0.0.0:7000"] }
 backends = [
-  { address = "a:1", health_check = { type = "http", path = "/" } }
+  { address = "http://a:1", health_check = { type = "http", path = "/" } }
 ]
 "#;
     let config: Config = toml::from_str(toml)?;

@@ -15,10 +15,12 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
+use huginn_proxy_lib::config::dynamic::backend::BackendUrl;
 use huginn_proxy_lib::config::{
     Backend, Domain, FingerprintConfig, KeepAliveConfig, ListenConfig, LoggingConfig, Route,
     SecurityConfig, TelemetryConfig, TimeoutConfig,
@@ -190,7 +192,7 @@ async fn capture_fingerprint_values() -> Result<(), Box<dyn std::error::Error + 
     let config = Config {
         listen: ListenConfig { addrs: vec![proxy_addr], ..Default::default() },
         backends: vec![Backend {
-            address: backend_addr.to_string(),
+            address: BackendUrl::from_str(&format!("http://{}", backend_addr)).expect("hardcoded"),
             http_version: None,
             health_check: None,
         }],

@@ -1,9 +1,10 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, ops::Deref, str::FromStr};
 
 use super::headers::HeaderManipulation;
 use super::security::{DomainSecurityConfig, RouteSecurityConfig};
 use crate::error::{ProxyError, Result};
 use serde::{Deserialize, Deserializer};
+use url::Url;
 
 /// HTTP version preference for backend connections
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -163,12 +164,110 @@ impl HealthCheckConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct BackendUrl(Url);
+
+impl std::fmt::Display for BackendUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for BackendUrl {
+    type Target = Url;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<Url> for BackendUrl {
+    fn as_ref(&self) -> &Url {
+        &self.0
+    }
+}
+
+impl BackendUrl {
+    pub fn host_str(&self) -> &str {
+        // BackendUrl guarantees host exists.
+        self.0.host_str().expect("BackendUrl invariant violated")
+    }
+
+    pub fn as_url(&self) -> &Url {
+        &self.0
+    }
+
+    fn validate(url: Url) -> std::result::Result<Self, BackendUrlError> {
+        match url.scheme() {
+            "http" | "https" => {}
+            other => return Err(BackendUrlError::UnsupportedScheme(other.to_owned())),
+        }
+
+        if url.host_str().is_none() {
+            return Err(BackendUrlError::MissingHost);
+        }
+
+        let _ = http::Uri::from_str(url.as_str()).map_err(BackendUrlError::UriReprFailed)?;
+
+        Ok(Self(url))
+    }
+}
+
+impl From<BackendUrl> for http::Uri {
+    fn from(val: BackendUrl) -> Self {
+        http::Uri::from_str(val.0.as_str()).expect("invariant violated")
+    }
+}
+
+impl From<BackendUrl> for Url {
+    fn from(val: BackendUrl) -> Self {
+        val.0.clone()
+    }
+}
+
+impl From<&BackendUrl> for http::Uri {
+    fn from(val: &BackendUrl) -> Self {
+        http::Uri::from_str(val.0.as_str()).expect("invariant violated")
+    }
+}
+
+impl std::str::FromStr for BackendUrl {
+    type Err = BackendUrlError;
+
+    fn from_str(raw: &str) -> std::result::Result<Self, Self::Err> {
+        let url = Url::parse(raw).map_err(BackendUrlError::Parse)?;
+        Self::validate(url)
+    }
+}
+
+impl<'de> Deserialize<'de> for BackendUrl {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        raw.parse::<BackendUrl>().map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BackendUrlError {
+    #[error("failed to parse backend address: {0}")]
+    Parse(#[source] url::ParseError),
+    #[error("missing host in backend address")]
+    MissingHost,
+    #[error("failed to represent address as valid URI: {0}")]
+    UriReprFailed(#[source] http::uri::InvalidUri),
+    #[error("unsupported scheme {0}, expected either https or http")]
+    UnsupportedScheme(String),
+}
+
 /// Backend server configuration
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct Backend {
-    /// Backend server address (host:port format)
-    /// Example: "backend-1:9000" or "192.168.1.10:8080"
-    pub address: String,
+    /// Backend url address (scheme://host:port format)
+    /// Example: "https://backend-1:9000" or "http://192.168.1.10:8080"
+    pub address: BackendUrl,
     /// HTTP version to use when connecting to this backend
     /// Options: "http11", "http2", "preserve" (default: "preserve" for HTTPS, "http11" for HTTP)
     #[serde(default)]
@@ -188,7 +287,7 @@ pub struct Route {
     pub prefix: String,
     /// Backend address to route matching requests to
     /// Must match one of the backend addresses defined in `backends`
-    pub backend: String,
+    pub backend: BackendUrl,
     /// Enable fingerprint header **injection** for this route (whole-block override).
     /// `None` (unset) inherits the domain's `fingerprinting`, then the built-in default `true`.
     /// Note: this only gates injection of the headers; capture/extraction is the static

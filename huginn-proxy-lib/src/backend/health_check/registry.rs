@@ -21,12 +21,13 @@
 use super::health::UpstreamHealth;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use url::Url;
 
 /// Address → health state map shared between the future `HealthCheckSupervisor`
 /// (writer, on hot reload) and the forwarding gate (reader, per request).
 #[derive(Debug, Default, Clone)]
 pub struct HealthRegistry {
-    inner: Arc<RwLock<HashMap<String, Arc<UpstreamHealth>>>>,
+    inner: Arc<RwLock<HashMap<Url, Arc<UpstreamHealth>>>>,
 }
 
 impl HealthRegistry {
@@ -39,7 +40,7 @@ impl HealthRegistry {
     ///
     /// Opt-in: only backends with an active health-check configuration are
     /// registered; unknown addresses are treated as healthy (no gate).
-    pub fn is_healthy(&self, address: &str) -> bool {
+    pub fn is_healthy(&self, address: &Url) -> bool {
         match self.inner.read() {
             Ok(map) => map.get(address).is_none_or(|h| h.is_healthy()),
             // Lock poisoning means a checker task panicked. Fail-open so the
@@ -53,23 +54,23 @@ impl HealthRegistry {
 
     /// Returns the [`UpstreamHealth`] handle for `address`, creating it (and
     /// inserting it into the map) if absent. Used by the supervisor when starting a probe task.
-    pub fn get_or_create(&self, address: &str) -> Arc<UpstreamHealth> {
+    pub fn get_or_create(&self, address: &Url) -> Arc<UpstreamHealth> {
         let mut map = self.inner.write().unwrap_or_else(|e| e.into_inner());
-        map.entry(address.to_string())
+        map.entry(address.clone())
             .or_insert_with(|| Arc::new(UpstreamHealth::new()))
             .clone()
     }
 
     /// Drop the entry for `address`. Used by the supervisor when a probe is
     /// canceled (backend removed or health check disabled via hot reload).
-    pub fn remove(&self, address: &str) {
+    pub fn remove(&self, address: &Url) {
         let mut map = self.inner.write().unwrap_or_else(|e| e.into_inner());
         map.remove(address);
     }
 
     /// Returns the set of currently registered addresses. Useful for hot
     /// reload diffing and for tests.
-    pub fn addresses(&self) -> Vec<String> {
+    pub fn addresses(&self) -> Vec<Url> {
         let map = self.inner.read().unwrap_or_else(|e| e.into_inner());
         map.keys().cloned().collect()
     }

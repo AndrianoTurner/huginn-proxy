@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+use url::Url;
+
 use crate::backend::health_check::HealthRegistry;
 
 use super::round_robin::RoundRobin;
@@ -28,10 +30,10 @@ impl BackendSelector {
     pub fn select(
         &self,
         route_prefix: &str,
-        candidates: &[&str],
+        candidates: &[&Url],
         health_registry: &HealthRegistry,
-    ) -> Option<String> {
-        let healthy: Vec<&str> = candidates
+    ) -> Option<Url> {
+        let healthy: Vec<&Url> = candidates
             .iter()
             .copied()
             .filter(|addr| health_registry.is_healthy(addr))
@@ -39,10 +41,10 @@ impl BackendSelector {
 
         match healthy.len() {
             0 => None,
-            1 => Some(healthy[0].to_string()),
+            1 => Some(healthy[0].clone()),
             len => {
                 let idx = self.get_or_create_rr(route_prefix).next(len);
-                Some(healthy[idx].to_string())
+                Some(healthy[idx].clone())
             }
         }
     }

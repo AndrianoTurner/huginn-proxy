@@ -1,6 +1,9 @@
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
-use huginn_proxy_lib::backend::{check_http, HealthCheckHttpClient};
+use huginn_proxy_lib::{
+    backend::{check_http, HealthCheckHttpClient},
+    config::dynamic::backend::BackendUrl,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 type TestErr = Box<dyn std::error::Error + Send + Sync>;
@@ -9,7 +12,7 @@ type TestErr = Box<dyn std::error::Error + Send + Sync>;
 async fn check_http_matches_status() -> Result<(), TestErr> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
-    let addr_s = format!("{addr}");
+    let addr_s = BackendUrl::from_str(&format!("{addr}")).expect("hardcoded");
 
     tokio::spawn(async move {
         let Ok((mut stream, _)) = listener.accept().await else {
@@ -24,7 +27,7 @@ async fn check_http_matches_status() -> Result<(), TestErr> {
     });
 
     let client = HealthCheckHttpClient::new(2);
-    let ok = check_http(&client, &addr_s, "/", 200, Duration::from_secs(2)).await;
+    let ok = check_http(&client, addr_s.as_ref().clone(), "/", 200, Duration::from_secs(2)).await;
     assert!(ok);
     Ok(())
 }
@@ -33,7 +36,7 @@ async fn check_http_matches_status() -> Result<(), TestErr> {
 async fn check_http_rejects_wrong_status() -> Result<(), TestErr> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
-    let addr_s = format!("{addr}");
+    let addr_s = BackendUrl::from_str(&format!("{addr}")).expect("hardcoded");
 
     tokio::spawn(async move {
         let Ok((mut stream, _)) = listener.accept().await else {
@@ -47,7 +50,8 @@ async fn check_http_rejects_wrong_status() -> Result<(), TestErr> {
     });
 
     let client = HealthCheckHttpClient::new(2);
-    let ok = check_http(&client, &addr_s, "/probe", 200, Duration::from_secs(2)).await;
+    let ok =
+        check_http(&client, addr_s.as_ref().clone(), "/probe", 200, Duration::from_secs(2)).await;
     assert!(!ok);
     Ok(())
 }

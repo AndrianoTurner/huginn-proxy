@@ -15,6 +15,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
+use url::Url;
 
 struct ActiveChecker {
     config: HealthCheckConfig,
@@ -24,7 +25,7 @@ struct ActiveChecker {
 
 pub struct HealthCheckSupervisor {
     registry: Arc<HealthRegistry>,
-    active: Mutex<HashMap<String, ActiveChecker>>,
+    active: Mutex<HashMap<Url, ActiveChecker>>,
 }
 
 impl HealthCheckSupervisor {
@@ -47,7 +48,7 @@ impl HealthCheckSupervisor {
 
         {
             let mut guard = self.active.lock().unwrap_or_else(|e| e.into_inner());
-            let to_remove: Vec<String> = guard
+            let to_remove: Vec<Url> = guard
                 .keys()
                 .filter(|k| !wanted.contains_key(*k))
                 .cloned()
@@ -105,19 +106,19 @@ impl HealthCheckSupervisor {
     }
 }
 
-fn collect_wanted_checks(backends: &[Backend]) -> HashMap<String, HealthCheckConfig> {
+fn collect_wanted_checks(backends: &[Backend]) -> HashMap<Url, HealthCheckConfig> {
     let mut out = HashMap::new();
     for b in backends {
         let Some(hc) = b.health_check.clone() else {
             continue;
         };
-        out.insert(b.address.clone(), hc);
+        out.insert(b.address.as_url().clone(), hc);
     }
     out
 }
 
 pub async fn run_health_checker(
-    address: String,
+    address: Url,
     health: Arc<UpstreamHealth>,
     config: HealthCheckConfig,
     cancel: CancellationToken,
@@ -155,7 +156,7 @@ pub async fn run_health_checker(
 }
 
 async fn run_one_probe(
-    address: &str,
+    address: &Url,
     health: &Arc<UpstreamHealth>,
     config: &HealthCheckConfig,
     http_client: Option<&HealthCheckHttpClient>,
@@ -164,15 +165,18 @@ async fn run_one_probe(
     metrics: &Metrics,
 ) {
     let ok = match &config.check_type {
-        HealthCheckType::Tcp => check_tcp(address, timeout).await,
+        HealthCheckType::Tcp => {
+            let tcp_address = address.host_str().unwrap_or("");
+            check_tcp(tcp_address, timeout).await
+        }
         HealthCheckType::Http { path, expected_status } => {
             let Some(client) = http_client else {
                 return;
             };
-            check_http(client, address, path, *expected_status, timeout).await
+            check_http(client, address.clone(), path, *expected_status, timeout).await
         }
     };
-    metrics.record_health_check_probe(address, ok);
+    metrics.record_health_check_probe(address.as_str(), ok);
     if let Some(new_state) = counter.record(ok) {
         health.set(new_state);
         if new_state {

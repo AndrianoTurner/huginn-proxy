@@ -1,9 +1,11 @@
+use url::Url;
+
 use crate::config::{Domain, Route};
 
 #[derive(Debug, Clone)]
 pub struct RouteMatch<'a> {
-    pub backend: &'a str,
-    pub backend_candidates: Vec<&'a str>,
+    pub backend: &'a Url,
+    pub backend_candidates: Vec<&'a Url>,
     pub fingerprinting: Option<bool>,
     pub matched_prefix: &'a str,
     pub replace_path: Option<&'a str>,
@@ -128,13 +130,13 @@ pub fn pick_route_with_fingerprinting<'a>(
         .iter()
         .take_while(|r| r.prefix.len() == first.prefix.len())
         .filter(|r| r.prefix == first.prefix)
-        .map(|r| r.backend.as_str())
+        .map(|r| &r.backend)
         .collect::<Vec<_>>();
 
     let security = first.security.as_ref();
     Some(RouteMatch {
-        backend: first.backend.as_str(),
-        backend_candidates,
+        backend: &first.backend,
+        backend_candidates: backend_candidates.iter().map(|v| v.as_url()).collect(),
         fingerprinting: first.fingerprinting,
         matched_prefix: first.prefix.as_str(),
         replace_path: first.replace_path.as_deref(),

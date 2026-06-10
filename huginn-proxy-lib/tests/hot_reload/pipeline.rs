@@ -176,7 +176,7 @@ async fn drain_removed_backend_replaces_pool() -> TestResult {
 
     let new_dyn = shared_dyn.load_full();
     assert_eq!(new_dyn.backends.len(), 1);
-    assert_eq!(new_dyn.backends[0].address, backend_a.to_string());
+    assert_eq!(new_dyn.backends[0].address.as_str(), backend_a.to_string());
     Ok(())
 }
 
@@ -274,7 +274,7 @@ async fn concurrent_reloads_are_serialized() -> TestResult {
 
     let dyn_cfg = shared_dyn.load_full();
     assert_eq!(dyn_cfg.backends.len(), 1);
-    assert_eq!(dyn_cfg.backends[0].address, backend_addr.to_string());
+    assert_eq!(dyn_cfg.backends[0].address.as_str(), backend_addr.to_string());
     Ok(())
 }
 

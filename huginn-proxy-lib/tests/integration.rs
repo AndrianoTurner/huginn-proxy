@@ -46,7 +46,7 @@ async fn test_config_loads_valid_file() -> Result<(), Box<dyn std::error::Error 
         r#"
 listen = {{ addrs = ["127.0.0.1:0"] }}
 backends = [
-    {{ address = "localhost:9000" }}
+    {{ address = "http://localhost:9000" }}
 ]
 "#
     )?;
@@ -54,7 +54,7 @@ backends = [
     let config = load_from_path(file.path())?;
     assert_eq!(config.listen.addrs[0].to_string(), "127.0.0.1:0");
     assert_eq!(config.backends.len(), 1);
-    assert_eq!(config.backends[0].address, "localhost:9000");
+    assert_eq!(config.backends[0].address.as_str(), "http://localhost:9000");
 
     Ok(())
 }
@@ -67,15 +67,15 @@ async fn test_config_with_routes() -> Result<(), Box<dyn std::error::Error + Sen
         r#"
 listen = {{ addrs = ["127.0.0.1:0"] }}
 backends = [
-    {{ address = "backend-a:9000" }},
-    {{ address = "backend-b:9000" }}
+    {{ address = "http://backend-a:9000" }},
+    {{ address = "http://backend-b:9000" }}
 ]
 
 [[domains]]
 host = "api.example.com"
 routes = [
-    {{ prefix = "/api", backend = "backend-a:9000" }},
-    {{ prefix = "/", backend = "backend-b:9000" }}
+    {{ prefix = "/api", backend = "http://backend-a:9000" }},
+    {{ prefix = "/", backend = "http://backend-b:9000" }}
 ]
 "#
     )?;
@@ -153,7 +153,7 @@ async fn test_config_loads_security_settings(
         r#"
 listen = {{ addrs = ["127.0.0.1:0"] }}
 backends = [
-    {{ address = "localhost:9000" }}
+    {{ address = "http://localhost:9000" }}
 ]
 
 [security]
@@ -187,7 +187,7 @@ async fn test_config_loads_keep_alive_settings(
         r#"
 listen = {{ addrs = ["127.0.0.1:0"] }}
 backends = [
-    {{ address = "localhost:9000" }}
+    {{ address = "http://localhost:9000" }}
 ]
 
 [timeout.keep_alive]

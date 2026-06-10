@@ -5,8 +5,10 @@ use crate::telemetry::Metrics;
 use http::{Request, Response, Version};
 use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::body::Incoming;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::time::Instant;
+use url::Url;
 
 type RespBody = BoxBody<bytes::Bytes, hyper::Error>;
 
@@ -26,10 +28,10 @@ pub struct ForwardConfig<'a> {
 }
 
 pub fn find_backend_config<'a>(
-    address: &str,
+    address: &Url,
     backends: &'a [crate::config::Backend],
 ) -> Option<&'a crate::config::Backend> {
-    backends.iter().find(|b| b.address == address)
+    backends.iter().find(|b| *b.address == *address)
 }
 
 pub fn determine_http_version(
@@ -61,7 +63,7 @@ pub fn determine_http_version(
 
 pub async fn forward(
     mut req: Request<Incoming>,
-    backend: String,
+    backend: Url,
     config: ForwardConfig<'_>,
 ) -> HttpResult<Response<RespBody>> {
     let start = Instant::now();
@@ -94,8 +96,7 @@ pub async fn forward(
     let new_path_str = String::from_utf8(new_pq)
         .map_err(|e| HttpError::InvalidUri(format!("Invalid UTF-8 in path: {}", e)))?;
 
-    let uri = format!("http://{}{}", backend, new_path_str)
-        .parse::<http::Uri>()
+    let uri = http::Uri::from_str(&format!("{}{}", backend.as_str(), new_path_str))
         .map_err(|e| HttpError::InvalidUri(e.to_string()))?;
 
     let client_version = req.version();
@@ -113,7 +114,7 @@ pub async fn forward(
             if let Ok(length) = length_str.parse::<u64>() {
                 config.metrics.record_backend_bytes_sent(
                     length,
-                    &backend,
+                    &backend.as_str(),
                     config.route,
                     config.domain,
                 );
@@ -153,7 +154,7 @@ pub async fn forward(
                     if let Ok(length) = length_str.parse::<u64>() {
                         config.metrics.record_backend_bytes_received(
                             length,
-                            &backend,
+                            backend.as_str(),
                             config.route,
                             config.domain,
                         );
@@ -168,7 +169,7 @@ pub async fn forward(
             );
 
             config.metrics.record_backend_request(
-                &backend,
+                &backend.as_str(),
                 status_code,
                 &protocol,
                 config.route,
@@ -176,7 +177,7 @@ pub async fn forward(
             );
             config.metrics.record_backend_duration(
                 duration,
-                &backend,
+                backend.as_str(),
                 status_code,
                 &protocol,
                 config.route,
@@ -187,7 +188,7 @@ pub async fn forward(
         Err(e) => {
             let error = HttpError::FailedToGetResponseFromBackend(e.to_string());
             config.metrics.record_backend_error(
-                &backend,
+                &backend.as_str(),
                 error.error_type(),
                 config.route,
                 config.domain,

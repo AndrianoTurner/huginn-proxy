@@ -48,11 +48,11 @@ fn rejects_missing_extension() -> TestResult {
 fn toml_parser_parses_minimal_config() -> TestResult {
     let input = r#"
         listen = { addrs = ["127.0.0.1:0"] }
-        backends = [{ address = "localhost:3000" }]
+        backends = [{ address = "https://localhost:3000" }]
     "#;
     let cfg = TomlParser.parse(input)?;
     assert_eq!(cfg.backends.len(), 1);
-    assert_eq!(cfg.backends[0].address, "localhost:3000");
+    assert_eq!(cfg.backends[0].address.as_str(), "http://localhost:3000");
     Ok(())
 }
 
@@ -72,11 +72,11 @@ listen:
   addrs:
     - "127.0.0.1:0"
 backends:
-  - address: "localhost:3000"
+  - address: "http://localhost:3000"
 "#;
     let cfg = YamlParser.parse(input)?;
     assert_eq!(cfg.backends.len(), 1);
-    assert_eq!(cfg.backends[0].address, "localhost:3000");
+    assert_eq!(cfg.backends[0].address.as_str(), "http://localhost:3000");
     Ok(())
 }
 
@@ -94,8 +94,8 @@ fn toml_and_yaml_produce_equivalent_backends() -> TestResult {
     let toml_input = r#"
         listen = { addrs = ["0.0.0.0:7000"] }
         backends = [
-          { address = "backend-a:9000", http_version = "http11" },
-          { address = "backend-b:9000", health_check = { interval_secs = 7, timeout_secs = 2 } },
+          { address = "http://backend-a:9000", http_version = "http11" },
+          { address = "http://backend-b:9000", health_check = { interval_secs = 7, timeout_secs = 2 } },
         ]
     "#;
     let yaml_input = r#"
@@ -103,9 +103,9 @@ listen:
   addrs:
     - "0.0.0.0:7000"
 backends:
-  - address: "backend-a:9000"
+  - address: "http://backend-a:9000"
     http_version: http11
-  - address: "backend-b:9000"
+  - address: "http://backend-b:9000"
     health_check:
       interval_secs: 7
       timeout_secs: 2

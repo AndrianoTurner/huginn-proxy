@@ -1,12 +1,14 @@
 use bytes::Bytes;
-use http::Request;
+use http::{Request, Uri};
 use http_body_util::{BodyExt, Full};
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
+use std::str::FromStr;
 use std::time::Duration;
 use tokio::time;
 use tracing::trace;
+use url::Url;
 
 use crate::config::BackendPoolConfig;
 
@@ -41,23 +43,25 @@ impl HealthCheckHttpClient {
 /// + drain).
 pub async fn check_http(
     client: &HealthCheckHttpClient,
-    address: &str,
+    mut address: Url,
     path: &str,
     expected_status: u16,
     timeout: Duration,
 ) -> bool {
-    let uri: http::Uri = match format!("http://{address}{path}").parse() {
-        Ok(u) => u,
-        Err(_) => {
-            trace!(%address, %path, "HTTP health check: invalid URI");
+    address.set_path(path);
+    let uri = match Uri::from_str(address.as_str()) {
+        Ok(uri) => uri,
+        Err(e) => {
+            trace!(%address, %path, error = %e, "HTTP health check: parsing URI failed");
             return false;
         }
     };
 
+    let host = address.host_str();
     let req = match Request::builder()
         .method(hyper::Method::GET)
-        .uri(&uri)
-        .header("Host", address)
+        .uri(uri)
+        .header("Host", host.unwrap_or(""))
         .body(Full::new(Bytes::new()))
     {
         Ok(r) => r,

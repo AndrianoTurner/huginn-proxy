@@ -1,13 +1,19 @@
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use huginn_proxy_lib::config::dynamic::backend::BackendUrl;
 use huginn_proxy_lib::config::{Backend, HealthCheckConfig, HealthCheckType};
 use huginn_proxy_lib::{HealthCheckSupervisor, HealthRegistry, Metrics};
 use tokio::runtime::Handle;
 
+fn backend_url(addr: &str) -> BackendUrl {
+    BackendUrl::from_str(addr).expect("hardcoded backend URL must be valid")
+}
+
 fn tcp_backend(addr: &str, interval: u64, threshold: u32) -> Backend {
     Backend {
-        address: addr.to_string(),
+        address: backend_url(addr),
         http_version: None,
         health_check: Some(HealthCheckConfig {
             check_type: HealthCheckType::Tcp,
@@ -23,14 +29,19 @@ fn tcp_backend(addr: &str, interval: u64, threshold: u32) -> Backend {
 async fn supervisor_marks_unhealthy_on_unreachable_port() {
     let registry = Arc::new(HealthRegistry::new());
     let sup = HealthCheckSupervisor::new(registry.clone());
-    let backend = tcp_backend("127.0.0.1:1", 1, 2);
+
+    let backend = tcp_backend("http://127.0.0.1:1", 1, 2);
+
     sup.reconcile(std::slice::from_ref(&backend), &Metrics::new_noop(), &Handle::current());
-    // First tick is immediate, then one per second allow time for 2 failed probes.
+
+    // First tick is immediate, then one per second; allow time for 2 failed probes.
     tokio::time::sleep(Duration::from_secs(3)).await;
+
     assert!(
-        !registry.is_healthy("127.0.0.1:1"),
+        !registry.is_healthy(backend.address.as_url()),
         "TCP connect should fail and the counter should flip upstream to unhealthy"
     );
+
     sup.shutdown();
 }
 
@@ -39,18 +50,26 @@ async fn supervisor_removes_backend_on_reconcile() {
     let registry = Arc::new(HealthRegistry::new());
     let sup = HealthCheckSupervisor::new(registry.clone());
 
-    let backend = tcp_backend("127.0.0.1:1", 1, 1);
+    let backend = tcp_backend("http://127.0.0.1:1", 1, 1);
+
     sup.reconcile(std::slice::from_ref(&backend), &Metrics::new_noop(), &Handle::current());
+
     tokio::time::sleep(Duration::from_secs(2)).await;
-    assert!(!registry.is_healthy("127.0.0.1:1"), "should be unhealthy before removal");
+
+    assert!(
+        !registry.is_healthy(backend.address.as_url()),
+        "should be unhealthy before removal"
+    );
 
     sup.reconcile(&[], &Metrics::new_noop(), &Handle::current());
 
     assert!(
-        registry.is_healthy("127.0.0.1:1"),
+        registry.is_healthy(backend.address.as_url()),
         "after removal opt-in fallback should return healthy for unknown address"
     );
+
     assert_eq!(registry.len(), 0, "registry should be empty after removal");
+
     sup.shutdown();
 }
 
@@ -64,14 +83,17 @@ async fn supervisor_adds_backend_on_reconcile() {
     assert_eq!(registry.len(), 0);
 
     // Add the backend.
-    let backend = tcp_backend("127.0.0.1:1", 1, 2);
+    let backend = tcp_backend("http://127.0.0.1:1", 1, 2);
+
     sup.reconcile(std::slice::from_ref(&backend), &Metrics::new_noop(), &Handle::current());
+
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     assert!(
-        !registry.is_healthy("127.0.0.1:1"),
+        !registry.is_healthy(backend.address.as_url()),
         "task should have been spawned and driven backend to unhealthy"
     );
+
     sup.shutdown();
 }
 
@@ -80,21 +102,27 @@ async fn supervisor_restarts_task_on_config_change() {
     let registry = Arc::new(HealthRegistry::new());
     let sup = HealthCheckSupervisor::new(registry.clone());
 
-    let slow = tcp_backend("127.0.0.1:1", 5, 10);
+    let slow = tcp_backend("http://127.0.0.1:1", 5, 10);
+
     sup.reconcile(std::slice::from_ref(&slow), &Metrics::new_noop(), &Handle::current());
+
     tokio::time::sleep(Duration::from_millis(500)).await;
+
     assert!(
-        registry.is_healthy("127.0.0.1:1"),
+        registry.is_healthy(slow.address.as_url()),
         "should still be healthy with high threshold"
     );
 
-    let fast = tcp_backend("127.0.0.1:1", 1, 1);
+    let fast = tcp_backend("http://127.0.0.1:1", 1, 1);
+
     sup.reconcile(std::slice::from_ref(&fast), &Metrics::new_noop(), &Handle::current());
+
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     assert!(
-        !registry.is_healthy("127.0.0.1:1"),
+        !registry.is_healthy(fast.address.as_url()),
         "new task with fast threshold should have marked backend unhealthy"
     );
+
     sup.shutdown();
 }

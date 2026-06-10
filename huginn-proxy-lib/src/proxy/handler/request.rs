@@ -193,7 +193,7 @@ pub async fn handle_proxy_request(
     ) {
         Some(addr) => addr,
         None => {
-            metrics.record_health_check_gate_reject(route_match.backend);
+            metrics.record_health_check_gate_reject(route_match.backend.as_str());
             let error = HttpError::UpstreamUnhealthy;
             let status_code = StatusCode::from(error.clone()).as_u16();
             metrics.record_entrypoint_request(&method, status_code, &protocol);
@@ -215,7 +215,7 @@ pub async fn handle_proxy_request(
             return Err(error);
         }
     };
-    metrics.record_backend_selection(&selected_upstream);
+    metrics.record_backend_selection(selected_upstream.as_str());
 
     if let Some(rate_limited_response) = check_rate_limit(
         security.rate_limit_manager.as_ref(),
